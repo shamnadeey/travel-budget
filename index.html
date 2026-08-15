@@ -72,6 +72,8 @@ tr.billed td{opacity:0.5;}
 .up{color:var(--gold);} .down{color:var(--rust);}
 .pill{display:inline-block;font-family:var(--font-mono);font-size:9px;padding:2px 7px;border-radius:10px;background:var(--paper-line);color:var(--ink-text-soft);}
 .pill.done{background:var(--olive);color:#fff;}
+.icon-edit-btn{background:none;border:none;cursor:pointer;font-size:12px;color:var(--ink-text-soft);padding:0 2px;vertical-align:middle;opacity:0.65;}
+.icon-edit-btn:hover{opacity:1;color:var(--ink-text);}
 
 .progress-track{height:8px;background:var(--paper-line);border-radius:4px;overflow:hidden;margin-top:4px;}
 .progress-fill{height:100%;}
@@ -803,10 +805,29 @@ try{
       <tr class="${r.received?'billed':''}">
         <td>${r.month}</td>
         <td class="mono">${r.due}</td>
-        <td class="mono">${fmt(r.amount)}</td>
+        <td class="mono">${fmt(r.amount)} <button class="icon-edit-btn" data-editrecv="${r.id}" title="Edit amount" aria-label="Edit amount">✎</button></td>
         <td>${r.received? '<span class="pill done">Received</span>' : '<span class="pill">Pending</span>'}</td>
         <td><button class="btn small ghost" data-recv="${r.id}">${r.received?'Mark pending':'Mark received'}</button></td>
       </tr>`).join('');
+    tbody.querySelectorAll('[data-editrecv]').forEach(btn=>{
+      btn.addEventListener('click', ()=>{
+        const row = state.receivableSchedule.find(x=>x.id===btn.dataset.editrecv);
+        const input = prompt(`New amount for ${row.month} (₹)`, row.amount);
+        if(input===null) return; // cancelled
+        const newAmount = parseFloat(input);
+        if(!isFinite(newAmount) || newAmount<0){ alert('Please enter a valid non-negative number.'); return; }
+        const oldAmount = row.amount;
+        if(newAmount===oldAmount) return;
+        row.amount = newAmount;
+        if(row.received){
+          // Already counted toward the bank balance at the old amount — adjust by the difference.
+          const delta = newAmount - oldAmount;
+          state.idfcBalance += delta;
+          logAudit('idfcBalance', delta, `${row.month} receivable amount corrected from ₹${oldAmount.toLocaleString('en-IN')} to ₹${newAmount.toLocaleString('en-IN')} (already received)`);
+        }
+        save(); renderAll();
+      });
+    });
     tbody.querySelectorAll('[data-recv]').forEach(btn=>{
       btn.addEventListener('click', ()=>{
         const row = state.receivableSchedule.find(x=>x.id===btn.dataset.recv);
