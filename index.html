@@ -775,8 +775,34 @@ try{
     const el = document.getElementById('dashCardSnapshot');
     document.getElementById('cardSnapTag').textContent = fmt(totalCardOutstanding())+' outstanding · '+fmt(totalAvailableLimit())+' available';
     el.innerHTML = `<table><thead><tr><th>Card</th><th>Limit</th><th>Outstanding</th><th>Reserved (EMIs)</th><th>Available</th></tr></thead><tbody>` +
-      Object.entries(state.cards).map(([k,c])=>`<tr><td>${c.label}</td><td class="mono">${fmt(c.limit)}</td><td class="mono down">${fmt(c.outstanding)}</td><td class="mono">${fmt(unbilledEmiSum(c))}</td><td class="mono up">${fmt(availableLimit(c))}</td></tr>`).join('')
+      Object.entries(state.cards).map(([k,c])=>`<tr>
+        <td>${c.label}</td>
+        <td class="mono">${fmt(c.limit)} <button class="icon-edit-btn" data-editcard="${k}:limit" title="Edit limit" aria-label="Edit limit">✎</button></td>
+        <td class="mono down">${fmt(c.outstanding)} <button class="icon-edit-btn" data-editcard="${k}:outstanding" title="Edit outstanding" aria-label="Edit outstanding">✎</button></td>
+        <td class="mono">${fmt(unbilledEmiSum(c))}</td>
+        <td class="mono up">${fmt(availableLimit(c))}</td>
+      </tr>`).join('')
       + `</tbody></table>`;
+    el.querySelectorAll('[data-editcard]').forEach(btn=>{
+      btn.addEventListener('click', ()=>{
+        const [key,field] = btn.dataset.editcard.split(':');
+        const c = state.cards[key];
+        const label = field==='limit' ? 'Credit limit' : 'Current outstanding';
+        const input = prompt(`${label} for ${c.label} (₹)`, c[field]);
+        if(input===null) return;
+        const newVal = parseFloat(input);
+        if(!isFinite(newVal) || newVal<0){ alert('Please enter a valid non-negative number.'); return; }
+        if(newVal===c[field]) return;
+        if(field==='outstanding'){
+          const delta = newVal - c.outstanding;
+          c.outstanding = newVal;
+          logAudit('card:'+key, delta, 'Outstanding manually edited to match statement');
+        } else {
+          c.limit = newVal;
+        }
+        save(); renderAll();
+      });
+    });
   }
   function renderDashMonthSpend(){
     const el = document.getElementById('dashMonthSpend');
@@ -979,7 +1005,10 @@ try{
           <td class="mono">${e.due}</td>
           <td class="mono">${fmt(e.amount)}</td>
           <td>${e.billed?'<span class="pill done">Billed</span>':'<span class="pill">Upcoming</span>'}</td>
-          <td><button class="btn small ghost" data-bill="${key}:${e.id}">${e.billed?'Mark upcoming':'Mark billed'}</button></td>
+          <td style="white-space:nowrap;">
+            <button class="btn small ghost" data-bill="${key}:${e.id}">${e.billed?'Mark upcoming':'Mark billed'}</button>
+            <button class="btn small ghost" data-delemi="${key}:${e.id}" title="Delete this EMI">Delete</button>
+          </td>
         </tr>`).join('');
       return `<div class="card">
         <div class="card-head">
@@ -1004,6 +1033,7 @@ try{
           <thead><tr><th>EMI</th><th>Due</th><th>Amount</th><th>Status</th><th></th></tr></thead>
           <tbody>${emisHtml}</tbody>
         </table>
+        <div style="margin-top:10px;"><button class="btn small ghost" data-addemi="${key}">+ Add EMI</button></div>
       </div>`;
     }).join('');
 
@@ -1034,6 +1064,37 @@ try{
           state.cards[key].outstanding += emi.amount;
           logAudit('card:'+key, emi.amount, `${emi.label} (due ${emi.due}) billed to statement`);
         }
+        save(); renderAll();
+      });
+    });
+    el.querySelectorAll('[data-delemi]').forEach(btn=>{
+      btn.addEventListener('click', ()=>{
+        const [key,id] = btn.dataset.delemi.split(':');
+        const c = state.cards[key];
+        const emi = c.emis.find(x=>x.id===id);
+        if(!emi) return;
+        if(!confirm(`Delete "${emi.label}" (due ${emi.due}, ₹${emi.amount.toLocaleString('en-IN')})? This cannot be undone.`)) return;
+        if(emi.billed){
+          // It was already counted in outstanding — remove that amount too.
+          c.outstanding -= emi.amount;
+          logAudit('card:'+key, -emi.amount, `Deleted billed EMI "${emi.label}" (due ${emi.due})`);
+        }
+        c.emis = c.emis.filter(x=>x.id!==id);
+        save(); renderAll();
+      });
+    });
+    el.querySelectorAll('[data-addemi]').forEach(btn=>{
+      btn.addEventListener('click', ()=>{
+        const key = btn.dataset.addemi;
+        const label = prompt('EMI label (e.g. EMI5)', 'EMI');
+        if(label===null) return;
+        const due = prompt('Due date (e.g. 12/03)', '');
+        if(due===null) return;
+        const amountStr = prompt('Amount (₹)', '');
+        if(amountStr===null) return;
+        const amount = parseFloat(amountStr);
+        if(!isFinite(amount) || amount<=0){ alert('Please enter a valid positive amount.'); return; }
+        state.cards[key].emis.push({id:uid(), label:label.trim()||'EMI', due:due.trim(), amount, billed:false});
         save(); renderAll();
       });
     });
