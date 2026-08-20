@@ -251,7 +251,7 @@ try{
   const db = firebase.database();
   // Shares the same Firebase project as portfolio.html, under its own path,
   // so portfolio.html can read these entries and approve them into the main ledger.
-  stateRef = db.ref('dailyExpenseLogger/state');
+  stateRef = db.ref('financeLedger/dailyLog');
   firebaseAvailable = true;
 }catch(err){
   console.error('Firebase init failed — app will run locally only:', err);

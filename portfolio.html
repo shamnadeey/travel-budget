@@ -416,7 +416,7 @@ try{
   const firebaseApp = firebase.initializeApp(firebaseConfig);
   const db = firebase.database();
   stateRef = db.ref('financeLedger/state');
-  dailyLogRef = db.ref('dailyExpenseLogger/state'); // same project, shared with the separate Daily Expense Logger app (index.html)
+  dailyLogRef = db.ref('financeLedger/dailyLog'); // same project, shared with the separate Daily Expense Logger app (index.html)
   firebaseAvailable = true;
 }catch(err){
   console.error('Firebase init failed — app will run locally only:', err);
